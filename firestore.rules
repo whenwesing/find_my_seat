@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string
+    //   - photoURL: string
+    //   - role: string (student, admin)
+    //
+    // Collection: reservations
+    // Fields:
+    //   - userId: string (required)
+    //   - userEmail: string
+    //   - userName: string
+    //   - seatId: string (required)
+    //   - date: string (YYYY-MM-DD, required)
+    //   - createdAt: timestamp
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidReservation(data) {
+      return data.keys().hasAll(['userId', 'seatId', 'date']) &&
+             data.userId == request.auth.uid &&
+             data.seatId is string &&
+             data.date is string &&
+             data.date.matches("^\\d{4}-\\d{2}-\\d{2}$");
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(userId);
+    }
+
+    match /reservations/{reservationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidReservation(request.resource.data);
+      allow update, delete: if false; // Reservations are immutable for students
+    }
+  }
+}

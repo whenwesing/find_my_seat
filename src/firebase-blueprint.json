@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["student", "admin"] }
+      },
+      "required": ["uid", "email"]
+    },
+    "Reservation": {
+      "title": "Reservation",
+      "description": "Study hall seat reservation",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "seatId": { "type": "string" },
+        "date": { "type": "string", "description": "ISO date string (YYYY-MM-DD)" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "seatId", "date"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "reservations": {
+      "schema": "Reservation",
+      "description": "Daily reservations"
+    }
+  }
+}
