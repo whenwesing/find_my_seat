@@ -124,7 +124,7 @@ interface SeatMapProps {
   reservations: any[];
 }
 
-export const TOTAL_CHAIRS = SEATS.reduce((acc, area) => acc + area.chairs.length, 0);
+export const TOTAL_TABLES = SEATS.filter(s => s.selectable).length;
 
 export default function SeatMap({ selectedSeatId, onSelectSeat, reservations }: SeatMapProps) {
   const reservedSeatMap = React.useMemo(() => {
@@ -143,103 +143,98 @@ export default function SeatMap({ selectedSeatId, onSelectSeat, reservations }: 
         <line x1="200" y1="140" x2="290" y2="140" stroke="#e5e7eb" strokeWidth="2" />
         <line x1="200" y1="260" x2="290" y2="260" stroke="#e5e7eb" strokeWidth="2" />
 
-        {SEATS.map((area) => (
-          <g key={area.id}>
-            {/* Main Area (Table/Circle) */}
-            {area.type === 'circle' ? (
-              <circle
-                cx={area.x}
-                cy={area.y}
-                r={area.r}
-                fill="#f3f4f6"
-                stroke="#d1d5db"
-                strokeWidth="1"
-              />
-            ) : (
-              <rect
-                x={area.x}
-                y={area.y}
-                width={area.width}
-                height={area.height}
-                rx="4"
-                fill="#f3f4f6"
-                stroke="#d1d5db"
-                strokeWidth="1"
-              />
-            )}
-            <text
-              x={area.type === 'circle' ? area.x : area.x + (area.width || 0) / 2}
-              y={area.type === 'circle' ? area.y : area.y + (area.height || 0) / 2}
-              textAnchor="middle"
-              dominantBaseline="central"
-              className="text-[10px] font-bold fill-gray-400 select-none"
+        {SEATS.map((area) => {
+          const userName = reservedSeatMap[area.id];
+          const isReserved = !!userName;
+          const isSelected = selectedSeatId === area.id;
+          const isSelectable = area.selectable;
+
+          const areaFill = isReserved
+            ? '#fee2e2'
+            : isSelected
+            ? '#dbeafe'
+            : '#f3f4f6';
+
+          const areaStroke = isReserved
+            ? '#ef4444'
+            : isSelected
+            ? '#3b82f6'
+            : '#d1d5db';
+
+          return (
+            <motion.g 
+              key={area.id}
+              whileHover={isSelectable && !isReserved ? { scale: 1.02 } : {}}
+              whileTap={isSelectable && !isReserved ? { scale: 0.98 } : {}}
+              onClick={() => isSelectable && !isReserved && onSelectSeat(area.id)}
+              className={isSelectable && !isReserved ? 'cursor-pointer' : isSelectable ? 'cursor-not-allowed' : ''}
             >
-              {area.label}
-            </text>
+              {/* Main Area (Table/Circle) */}
+              {area.type === 'circle' ? (
+                <circle
+                  cx={area.x}
+                  cy={area.y}
+                  r={area.r}
+                  fill={areaFill}
+                  stroke={areaStroke}
+                  strokeWidth={isSelected || isReserved ? "2" : "1"}
+                  className="transition-colors duration-200"
+                />
+              ) : (
+                <rect
+                  x={area.x}
+                  y={area.y}
+                  width={area.width}
+                  height={area.height}
+                  rx="4"
+                  fill={areaFill}
+                  stroke={areaStroke}
+                  strokeWidth={isSelected || isReserved ? "2" : "1"}
+                  className="transition-colors duration-200"
+                />
+              )}
+              <text
+                x={area.type === 'circle' ? area.x : area.x + (area.width || 0) / 2}
+                y={area.type === 'circle' ? area.y : area.y + (area.height || 0) / 2}
+                textAnchor="middle"
+                dominantBaseline="central"
+                className={`text-[10px] font-bold select-none ${
+                  isReserved ? 'fill-red-600' : isSelected ? 'fill-blue-600' : 'fill-gray-400'
+                }`}
+              >
+                {area.label}
+              </text>
 
-            {/* Individual Chairs */}
-            {area.chairs.map((chair) => {
-              const userName = reservedSeatMap[chair.id];
-              const isReserved = !!userName;
-              const isSelected = selectedSeatId === chair.id;
-
-              const fill = isReserved
-                ? '#ef4444'
-                : isSelected
-                ? '#3b82f6'
-                : '#ffffff';
-
-              const stroke = isReserved
-                ? '#b91c1c'
-                : isSelected
-                ? '#1d4ed8'
-                : '#9ca3af';
-
-              return (
-                <motion.g
+              {/* Individual Chairs (Decorative) */}
+              {area.chairs.map((chair) => (
+                <rect
                   key={chair.id}
-                  whileHover={!isReserved ? { scale: 1.1 } : {}}
-                  whileTap={!isReserved ? { scale: 0.9 } : {}}
-                  onClick={() => !isReserved && onSelectSeat(chair.id)}
-                  className={!isReserved ? 'cursor-pointer' : 'cursor-not-allowed'}
+                  x={chair.x}
+                  y={chair.y}
+                  width={chair.width}
+                  height={chair.height}
+                  rx="2"
+                  fill={isReserved ? '#fecaca' : isSelected ? '#bfdbfe' : '#ffffff'}
+                  stroke={isReserved ? '#f87171' : isSelected ? '#60a5fa' : '#9ca3af'}
+                  strokeWidth="0.5"
+                  className="transition-colors duration-200"
+                />
+              ))}
+
+              {/* Reservation Name */}
+              {isReserved && (
+                <text
+                  x={area.type === 'circle' ? area.x : area.x + (area.width || 0) / 2}
+                  y={area.type === 'circle' ? area.y + area.r! + 8 : area.y + area.height! + 8}
+                  textAnchor="middle"
+                  className="text-[7px] fill-red-600 font-bold select-none"
                 >
-                  <rect
-                    x={chair.x}
-                    y={chair.y}
-                    width={chair.width}
-                    height={chair.height}
-                    rx="2"
-                    fill={fill}
-                    stroke={stroke}
-                    strokeWidth="1"
-                    className="transition-colors duration-200"
-                  />
-                  <text
-                    x={chair.x + chair.width / 2}
-                    y={chair.y + chair.height / 2}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    className={`text-[6px] font-bold select-none ${
-                      isReserved || isSelected ? 'fill-white' : 'fill-gray-500'
-                    }`}
-                  >
-                    {chair.id.split('-')[1]}
-                  </text>
-                  {isReserved && (
-                    <text
-                      x={chair.x + chair.width / 2}
-                      y={chair.y + chair.height + 6}
-                      textAnchor="middle"
-                      className="text-[5px] fill-red-600 font-medium select-none"
-                    >
-                      {userName.length > 3 ? userName.substring(0, 2) + '..' : userName}
-                    </text>
-                  )}
-                </motion.g>
-              );
-            })}
-          </g>
-        ))}
+                  {userName}
+                </text>
+              )}
+            </motion.g>
+          );
+        })}
       </svg>
       <div className="mt-4 flex justify-center gap-4 text-xs font-medium text-gray-500">
         <div className="flex items-center gap-1">
@@ -247,11 +242,11 @@ export default function SeatMap({ selectedSeatId, onSelectSeat, reservations }: 
           <span>예약 가능</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
+          <div className="w-3 h-3 bg-blue-100 border border-blue-500 rounded-sm"></div>
           <span>선택됨</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-3 h-3 bg-red-500 rounded-sm"></div>
+          <div className="w-3 h-3 bg-red-100 border border-red-500 rounded-sm"></div>
           <span>예약됨</span>
         </div>
       </div>

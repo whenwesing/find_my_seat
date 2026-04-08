@@ -4,10 +4,12 @@ import {
   db, 
   googleProvider, 
   OperationType, 
-  handleFirestoreError 
+  handleFirestoreError,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
 } from './firebase';
 import { 
-  signInWithPopup, 
   signOut, 
   onAuthStateChanged, 
   User 
@@ -26,7 +28,7 @@ import {
 import { format, isWithinInterval, set, addDays } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 import { LogIn, LogOut, Calendar, Clock, User as UserIcon, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import SeatMap, { TOTAL_CHAIRS } from './components/SeatMap';
+import SeatMap, { TOTAL_TABLES } from './components/SeatMap';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -44,6 +46,14 @@ export default function App() {
 
   // Auth listener
   useEffect(() => {
+    // Check for redirect result on mount
+    getRedirectResult(auth).catch((e) => {
+      console.error('Redirect result error:', e);
+      if (e.code === 'auth/internal-error' || e.message.includes('missing initial state')) {
+        setError('로그인 상태를 초기화하는 중 오류가 발생했습니다. 브라우저 설정을 확인하거나 다시 시도해 주세요.');
+      }
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u) {
@@ -78,11 +88,23 @@ export default function App() {
   }, [tomorrowStr]);
 
   const handleLogin = async () => {
+    setError(null);
     try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (e) {
+      // Use redirect for mobile/tablet, popup for desktop
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        await signInWithRedirect(auth, googleProvider);
+      } else {
+        await signInWithPopup(auth, googleProvider);
+      }
+    } catch (e: any) {
       console.error('Login error:', e);
-      setError('로그인에 실패했습니다.');
+      if (e.code === 'auth/popup-blocked') {
+        setError('팝업이 차단되었습니다. 브라우저 설정에서 팝업을 허용해 주세요.');
+      } else {
+        setError('로그인에 실패했습니다. 다시 시도해 주세요.');
+      }
     }
   };
 
@@ -136,7 +158,7 @@ export default function App() {
       );
       const snapshot = await getDocs(q);
       if (!snapshot.empty) {
-        setError('이미 예약된 좌석입니다.');
+        setError('이미 예약된 테이블입니다.');
         setIsReserving(false);
         return;
       }
@@ -181,7 +203,7 @@ export default function App() {
             <Calendar className="w-10 h-10 text-blue-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">스터디홀 예약</h1>
-          <p className="text-gray-500 mb-8">구글 계정으로 로그인하여 좌석을 예약하세요.</p>
+          <p className="text-gray-500 mb-8">구글 계정으로 로그인하여 테이블을 예약하세요.</p>
           <button
             onClick={handleLogin}
             className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-200"
@@ -289,11 +311,11 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="font-bold text-green-900">예약 완료</h3>
-                    <p className="text-green-700 text-sm">내일의 좌석이 확정되었습니다.</p>
+                    <p className="text-green-700 text-sm">내일의 테이블이 확정되었습니다.</p>
                   </div>
                 </div>
                 <div className="bg-white rounded-xl p-4 border border-green-100">
-                  <div className="text-xs text-gray-400 mb-1 uppercase tracking-widest font-bold">선택된 좌석</div>
+                  <div className="text-xs text-gray-400 mb-1 uppercase tracking-widest font-bold">선택된 테이블</div>
                   <div className="text-3xl font-black text-green-600">{myReservation.seatId}번</div>
                 </div>
               </motion.section>
@@ -305,11 +327,11 @@ export default function App() {
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="bg-blue-50 border border-blue-200 rounded-2xl p-6"
               >
-                <h3 className="font-bold text-blue-900 mb-2">좌석을 선택하세요</h3>
-                <p className="text-blue-700 text-sm mb-4">원하는 좌석을 클릭한 후 예약 버튼을 눌러주세요.</p>
+                <h3 className="font-bold text-blue-900 mb-2">테이블을 선택하세요</h3>
+                <p className="text-blue-700 text-sm mb-4">원하는 테이블을 클릭한 후 예약 버튼을 눌러주세요.</p>
                 {selectedSeatId && (
                   <div className="bg-white rounded-xl p-4 border border-blue-100 mb-4">
-                    <div className="text-xs text-gray-400 mb-1 uppercase tracking-widest font-bold">선택된 좌석</div>
+                    <div className="text-xs text-gray-400 mb-1 uppercase tracking-widest font-bold">선택된 테이블</div>
                     <div className="text-3xl font-black text-blue-600">{selectedSeatId}번</div>
                   </div>
                 )}
@@ -359,10 +381,10 @@ export default function App() {
         <div className="md:col-span-2">
           <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-xl font-bold text-gray-900">좌석 배치도</h2>
+              <h2 className="text-xl font-bold text-gray-900">테이블 배치도</h2>
               <div className="text-sm text-gray-500 flex items-center gap-2">
                 <span className="w-2 h-2 bg-red-500 rounded-full"></span>
-                {reservations.length} / {TOTAL_CHAIRS} 예약됨
+                {reservations.length} / {TOTAL_TABLES} 예약됨
               </div>
             </div>
             
@@ -379,10 +401,10 @@ export default function App() {
               </p>
               <ul className="list-disc list-inside space-y-1 text-xs">
                 <li>예약은 매일 12:00부터 22:00까지만 가능합니다.</li>
-                <li>다음 날의 좌석을 미리 예약하는 시스템입니다.</li>
+                <li>다음 날의 테이블을 미리 예약하는 시스템입니다.</li>
                 <li>토요일과 일요일은 스터디홀을 운영하지 않습니다.</li>
-                <li>하루에 한 번만 예약할 수 있으며, 예약 후 좌석 변경은 불가능합니다.</li>
-                <li>좌석 번호를 클릭하여 선택할 수 있습니다.</li>
+                <li>하루에 한 번만 예약할 수 있으며, 예약 후 테이블 변경은 불가능합니다.</li>
+                <li>테이블 번호를 클릭하여 선택할 수 있습니다.</li>
               </ul>
             </div>
           </div>
