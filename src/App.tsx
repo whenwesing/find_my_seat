@@ -39,10 +39,18 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const tomorrow = addDays(new Date(), 1);
-  const tomorrowStr = format(tomorrow, 'yyyy-MM-dd');
-  const isWeekend = tomorrow.getDay() === 0 || tomorrow.getDay() === 6;
+  const now = new Date();
+  const currentHour = now.getHours();
+
+  // If before 9 AM, we show "today's" reservations (which were booked yesterday)
+  // After 9 AM, we show "tomorrow's" reservations (which are being booked today)
+  const displayDate = currentHour < 9 ? now : addDays(now, 1);
+  const displayDateStr = format(displayDate, 'yyyy-MM-dd');
+
+  // Booking is always for "tomorrow" relative to "today" (the actual calendar day)
+  const bookingDate = addDays(now, 1);
+  const bookingDateStr = format(bookingDate, 'yyyy-MM-dd');
+  const isWeekend = bookingDate.getDay() === 0 || bookingDate.getDay() === 6;
 
   // Auth listener
   useEffect(() => {
@@ -77,7 +85,7 @@ export default function App() {
 
   // Reservations listener
   useEffect(() => {
-    const q = query(collection(db, 'reservations'), where('date', '==', tomorrowStr));
+    const q = query(collection(db, 'reservations'), where('date', '==', displayDateStr));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const res = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setReservations(res);
@@ -85,7 +93,7 @@ export default function App() {
       handleFirestoreError(error, OperationType.LIST, 'reservations');
     });
     return unsubscribe;
-  }, [tomorrowStr]);
+  }, [displayDateStr]);
 
   const handleLogin = async () => {
     setError(null);
@@ -117,8 +125,27 @@ export default function App() {
   };
 
   const myReservation = useMemo(() => {
-    return reservations.find(r => r.userId === user?.uid);
+    // For checking if user already booked for "tomorrow"
+    // We need to fetch this separately or filter from a larger set
+    // But since the main 'reservations' state now follows displayDateStr,
+    // we should check against bookingDateStr specifically for the booking button logic.
+    return null; // We'll handle this inside handleReserve or a separate state if needed
   }, [reservations, user]);
+
+  // Separate state to check if user already booked for "tomorrow"
+  const [hasBookedTomorrow, setHasBookedTomorrow] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    const q = query(
+      collection(db, 'reservations'), 
+      where('date', '==', bookingDateStr),
+      where('userId', '==', user.uid)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setHasBookedTomorrow(!snapshot.empty);
+    });
+    return unsubscribe;
+  }, [user, bookingDateStr]);
 
   const isWithinReservationTime = () => {
     if (isWeekend) return false;
@@ -141,7 +168,7 @@ export default function App() {
       return;
     }
 
-    if (myReservation) {
+    if (hasBookedTomorrow) {
       setError('이미 내일의 예약을 완료하셨습니다.');
       return;
     }
@@ -153,7 +180,7 @@ export default function App() {
       // Double check if seat is still available
       const q = query(
         collection(db, 'reservations'), 
-        where('date', '==', tomorrowStr), 
+        where('date', '==', bookingDateStr), 
         where('seatId', '==', selectedSeatId)
       );
       const snapshot = await getDocs(q);
@@ -168,7 +195,7 @@ export default function App() {
         userEmail: user.email,
         userName: user.displayName,
         seatId: selectedSeatId,
-        date: tomorrowStr,
+        date: bookingDateStr,
         createdAt: serverTimestamp()
       });
 
@@ -259,8 +286,12 @@ export default function App() {
             </h2>
             <div className="space-y-4">
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
+                <span className="text-gray-500 text-sm">현재 표시 날짜</span>
+                <span className="font-semibold text-gray-900">{displayDateStr}</span>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-50">
                 <span className="text-gray-500 text-sm">예약 대상 날짜</span>
-                <span className="font-semibold text-gray-900">{tomorrowStr}</span>
+                <span className="font-semibold text-blue-600">{bookingDateStr}</span>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
                 <span className="text-gray-500 text-sm">예약 가능 시간</span>
@@ -297,7 +328,7 @@ export default function App() {
                 <h3 className="font-bold text-gray-900 mb-2">주말 휴무 안내</h3>
                 <p className="text-gray-600 text-sm">토요일과 일요일은 스터디홀을 운영하지 않습니다. 월요일 예약은 일요일 12:00부터 가능합니다.</p>
               </motion.section>
-            ) : myReservation ? (
+            ) : hasBookedTomorrow ? (
               <motion.section 
                 key="reserved"
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -316,7 +347,7 @@ export default function App() {
                 </div>
                 <div className="bg-white rounded-xl p-4 border border-green-100">
                   <div className="text-xs text-gray-400 mb-1 uppercase tracking-widest font-bold">선택된 테이블</div>
-                  <div className="text-3xl font-black text-green-600">{myReservation.seatId}번</div>
+                  <div className="text-3xl font-black text-green-600">{reservations.find(r => r.userId === user?.uid && r.date === bookingDateStr)?.seatId || '?'}번</div>
                 </div>
               </motion.section>
             ) : (
@@ -402,6 +433,7 @@ export default function App() {
               <ul className="list-disc list-inside space-y-1 text-xs">
                 <li>예약은 매일 12:00부터 22:00까지만 가능합니다.</li>
                 <li>다음 날의 테이블을 미리 예약하는 시스템입니다.</li>
+                <li>예약 현황은 다음 날 오전 9시까지 유지되며, 9시에 초기화됩니다.</li>
                 <li>토요일과 일요일은 스터디홀을 운영하지 않습니다.</li>
                 <li>하루에 한 번만 예약할 수 있으며, 예약 후 테이블 변경은 불가능합니다.</li>
                 <li>테이블 번호를 클릭하여 선택할 수 있습니다.</li>
